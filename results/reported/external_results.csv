@@ -1,0 +1,4 @@
+Cohort,Scored,Accuracy,MacroF1,ECE,Coverage,Verified_percent
+UCSF-PDGM,438,82.4,80.6,0.061,91.1,89.3
+UPenn-GBM,611,80.8,78.9,0.069,90.5,87.6
+Combined,1049,81.6,79.8,0.065,90.8,88.4

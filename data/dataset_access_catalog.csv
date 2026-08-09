@@ -1,0 +1,4 @@
+dataset,subjects_reported_in_manuscript,official_source,official_url,alternate_official_url,redistributed_here,notes
+BraTS 2021,1251 labelled training; 219 validation; 570 hidden-label test,BraTS/Synapse archive; TCIA BraTS 2021 analysis-result page,https://www.synapse.org/Synapse:syn25829067,https://www.cancerimagingarchive.net/analysis-result/rsna-asnr-miccai-brats-2021/,No,Original Synapse challenge page is archived; use an authorized current BraTS/TCIA source and follow its terms.
+UCSF-PDGM,501,The Cancer Imaging Archive (TCIA),https://www.cancerimagingarchive.net/collection/ucsf-pdgm/,https://doi.org/10.7937/tcia.bdgf-8v37,No,Public TCIA collection; repository stores local paths/manifests only.
+UPenn-GBM,630,The Cancer Imaging Archive (TCIA),https://www.cancerimagingarchive.net/collection/upenn-gbm/,,No,Public TCIA collection; repository stores local paths/manifests only.

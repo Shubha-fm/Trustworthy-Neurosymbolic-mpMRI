@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.nii
+*.nii.gz
+*.pt
+*.pth
+*.ckpt
+data/raw/
+data/processed/
+outputs/
+.DS_Store

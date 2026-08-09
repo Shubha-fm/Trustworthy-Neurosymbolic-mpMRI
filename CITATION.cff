@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the associated manuscript."
+title: "Trustworthy Neurosymbolic Fusion for Multi-Parametric Brain MRI"
+type: software
+authors:
+  - family-names: Chakraborty
+    given-names: Shubha
+  - family-names: Karmakar
+    given-names: Rahul
+version: 1.0.0
+date-released: 2026-08-09
+license: MIT

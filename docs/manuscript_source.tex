@@ -1,0 +1,1073 @@
+\documentclass[preprint,11pt]{elsarticle}
+
+% Elsevier / Artificial Intelligence in Medicine manuscript
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{adjustbox}
+\usepackage{makecell}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{siunitx}
+\usepackage{url}
+\usepackage{float}
+\usepackage{placeins}
+\usepackage{hyperref}
+\usepackage[margin=0.85in]{geometry}
+\usepackage{microtype}
+\hypersetup{hidelinks}
+\journal{Artificial Intelligence in Medicine}
+\biboptions{sort&compress}
+
+\setlength{\textfloatsep}{8pt plus 2pt minus 2pt}
+\setlength{\floatsep}{6pt plus 2pt minus 2pt}
+\setlength{\intextsep}{6pt plus 2pt minus 2pt}
+\setlength{\abovecaptionskip}{4pt}
+\setlength{\belowcaptionskip}{2pt}
+\renewcommand{\arraystretch}{1.08}
+
+\newtheorem{definition}{Definition}
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}{Proposition}
+\newtheorem{remark}{Remark}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\X}{\mathcal{X}}
+\newcommand{\Z}{\mathcal{Z}}
+\newcommand{\Y}{\mathcal{Y}}
+\newcommand{\M}{\mathcal{M}}
+\newcommand{\B}{\mathcal{B}}
+\newcommand{\C}{\mathcal{C}}
+\newcommand{\eps}{\varepsilon}
+
+\lstdefinestyle{codebox}{basicstyle=\ttfamily\scriptsize,breaklines=true,columns=fullflexible,frame=single,numbers=none,showstringspaces=false,tabsize=2}
+
+\begin{document}
+\begin{frontmatter}
+
+\title{Trustworthy Neurosymbolic Fusion for Multi-Parametric Brain MRI with Formal Verification and Calibrated Uncertainty}
+
+\author[ub]{Shubha Chakraborty\corref{cor1}}
+\ead{shubhacs@ieee.org}
+\author[ub]{Rahul Karmakar}
+\ead{rkarmakar@cs.buruniv.ac.in}
+\affiliation[ub]{organization={Department of Computer Science, The University of Burdwan},
+            addressline={Golapbag},
+            city={Purba Bardhaman},
+            postcode={713104},
+            state={West Bengal},
+            country={India}}
+\cortext[cor1]{Corresponding author.}
+
+\begin{abstract}
+Deep learning has improved multi-parametric magnetic resonance imaging (mpMRI) analysis, but predictive performance alone does not establish that a medical-AI output is reliable under explicitly stated conditions. This paper presents a trustworthy neurosymbolic framework for a reproducible brain-tumour lesion-compartment benchmark using T1, post-contrast T1-weighted, T2-weighted, and T2-FLAIR MRI. Four sequence-specific encoders learn complementary representations, while imaging-informed symbolic priors regularise the fusion model. Sound latent over-approximations connect bounded input perturbations to an SMT encoding of the fusion head, allowing selected consistency properties to be reported as verified when the corresponding negated query is UNSAT. A separate TLA$^{+}$ model verifies the release workflow so that SAT and TIMEOUT outcomes cannot receive a verified-property status. Split conformal prediction provides calibrated set-valued uncertainty independently of formal property verification. The framework is evaluated with subject-level BraTS 2021 folds and externally assessed on eligible UCSF-PDGM and UPenn-GBM subjects. The proposed model achieves $86.7\pm0.9\%$ accuracy and $85.9\pm1.0\%$ macro-F1 on BraTS 2021, with an expected calibration error of 0.047. At the selected perturbation radius $\epsilon=0.031$, $92.8\%$ of tested properties are verified over the corresponding latent abstractions, with a mean solver time of 9.7 s per property. External class-wise evaluation gives macro-F1 values of 80.6\% on UCSF-PDGM and 78.9\% on UPenn-GBM, while empirical conformal coverage remains close to the nominal 90\% target. The results demonstrate a layered assurance design in which prediction, formal property verification, workflow correctness, and calibrated uncertainty remain explicit and semantically distinct.
+\end{abstract}
+
+\begin{graphicalabstract}
+\includegraphics[width=0.92\linewidth]{figures/graphical_abstract.png}
+\end{graphicalabstract}
+
+\begin{highlights}
+  \item Integrates multimodal mpMRI learning, formal property verification, and calibration.
+  \item Verifies selected fusion-head properties over sound latent abstractions using SMT.
+  \item Checks safe verification-status release in TLA$^{+}$ with a negative control.
+  \item Separates formal verification status from conformal set-valued uncertainty.
+  \item Evaluates BraTS 2021 internally and UCSF-PDGM/UPenn-GBM externally.
+\end{highlights}
+
+\begin{keyword}
+trustworthy medical AI \sep multi-parametric MRI \sep neurosymbolic AI \sep formal verification \sep TLA$^{+}$ \sep conformal prediction
+\end{keyword}
+
+\end{frontmatter}
+
+\section{Introduction}
+\label{sec:introduction}
+
+Deep learning has become increasingly effective in medical imaging, but high predictive accuracy alone is not sufficient for trustworthy medical AI. In clinically sensitive settings, a useful system should also communicate uncertainty, expose the conditions under which a prediction is considered reliable, and prevent unsupported outputs from being presented with an unwarranted verified status. These requirements are especially relevant to multi-parametric magnetic resonance imaging (mpMRI), where T1, post-contrast T1-weighted (T1ce), T2-weighted, and T2-FLAIR sequences provide complementary but heterogeneous evidence about tumour anatomy, enhancement, fluid-rich abnormality, and infiltrative change \cite{zhou2019review,baltrusaitis2019multimodal,li2022multimodal}.
+
+Multimodal medical-imaging models commonly use early, intermediate, late, attention-based, transformer, or evidential fusion \cite{ramachandram2017deep,chen2021transunet,hatamizadeh2022unetr,hayat2022medfuse,sensoy2018evidential}. These methods can improve representation learning and classification, but their confidence scores do not by themselves establish that a prediction satisfies an explicit consistency or robustness property. Calibration and conformal prediction quantify predictive uncertainty \cite{vovk2005algorithmic,angelopoulos2021gentle,romano2020classification}, whereas formal neural-network verification addresses a different question: whether a stated property holds over a defined input or latent region \cite{katz2017reluplex,katz2019marabou,singh2019abstract,zhang2018efficient}. Direct SMT encoding of a complete four-branch 3D network is, however, computationally difficult. The present work therefore encodes the fusion head exactly while representing the sequence encoders through sound latent over-approximations.
+
+A second challenge is that trustworthy medical AI involves more than numerical verification. A solver can return UNSAT, SAT, or TIMEOUT, and a safe system must preserve the meaning of those outcomes when producing an output for downstream use. In parallel, structured domain knowledge can guide learning through neurosymbolic priors \cite{donadello2017ltn,badreddine2022logic,manhaeve2018deepproblog}, but high rule satisfaction during training is not a formal proof. This motivates an architecture in which learned fusion, symbolic priors, formal property checking, workflow-level safety, and predictive uncertainty are treated as related but semantically distinct components.
+
+This paper develops such an architecture for a reproducible lesion-compartment task using public brain-tumour mpMRI cohorts. Four sequence-specific encoders produce latent representations that are over-approximated using sound abstractions. Selected fusion-head properties are checked with SMT solving, TLA$^{+}$ verifies the verification-status release protocol, and split conformal prediction provides set-valued uncertainty. The framework is evaluated on subject-level BraTS 2021 data and externally tested on eligible UCSF-PDGM and UPenn-GBM subjects \cite{brats2021,ucsf2022,upenn2022}. The goal is not to claim clinical diagnosis or full end-to-end neural verification, but to show how a medical-AI pipeline can attach scoped machine-checkable evidence and calibrated uncertainty to multimodal predictions.
+
+\subsection{Research gap and contributions}
+\label{subsec:contributions}
+
+The central gap is the absence of a unified medical-AI framework that clearly separates and connects four forms of evidence: multimodal prediction, structured prior knowledge, formal property verification, and calibrated uncertainty. Existing fusion models mainly optimise predictive performance; uncertainty methods do not prove model properties; neurosymbolic regularisation does not guarantee post-training correctness; and numerical verification alone does not ensure that solver outcomes are released safely. This paper makes the following contributions:
+
+\begin{enumerate}
+    \item \textbf{Trustworthy multimodal medical-AI architecture.} A neurosymbolic mpMRI framework that integrates four sequence-specific encoders, multimodal fusion, structured prior regularisation, formal verification, and uncertainty quantification while keeping their semantics explicit.
+
+    \item \textbf{Formally scoped property verification.} A latent-abstraction and SMT procedure that verifies selected fusion-head properties under stated perturbation assumptions, together with a conditional soundness result linking UNSAT verification outcomes to represented real perturbations.
+
+    \item \textbf{Safe verification-status workflow.} A TLA$^{+}$ specification of verification-status release that checks traceability and prevents SAT, TIMEOUT, or incomplete outputs from receiving a verified-property status; a deliberately unsafe mutant is used as a negative control to demonstrate that the invariants are falsifiable.
+
+    \item \textbf{Calibrated uncertainty separated from proof.} Split conformal prediction produces set-valued outputs independently of formal property verification, preventing probabilistic uncertainty estimates from being interpreted as machine-checked guarantees.
+
+    \item \textbf{Multi-cohort experimental evaluation.} A subject-level evaluation on BraTS 2021 with external transfer to UCSF-PDGM and UPenn-GBM, covering prediction, calibration, uncertainty, verification yield, solver behaviour, and ablations.
+\end{enumerate}
+
+\paragraph{Scope of claims.}
+The derived classes are experimental imaging categories and are not intended as clinical diagnostic, grading, prognostic, or treatment-response labels. SMT verification applies to selected fusion-head properties over sound latent abstractions rather than to the complete voxel-level 3D network. TLA$^{+}$ verifies release-workflow logic, not classifier accuracy or deployment infrastructure. External conformal coverage is reported empirically because distribution-free coverage requires the corresponding exchangeability assumptions. Some symbolic priors are conceptually related to the volume-ratio rule used to construct the derived labels; these are explicitly separated from label-independent priors in Section~\ref{subsec:axioms_independence}. Reporting is structured with reference to TRIPOD+AI and CLAIM where applicable \cite{collins2024tripod,tejani2024claim}. These frameworks are used as reporting guides rather than as evidence of clinical validity or as a claim of formal checklist compliance. The broader translational discussion is informed by recent trustworthy-healthcare-AI guidance \cite{lekadir2025future,cicek2025position,andersen2026mapping}.
+
+\paragraph{Paper organization.}
+Section~\ref{sec:related} reviews multimodal medical imaging, trustworthy medical AI, neurosymbolic learning, formal neural-network verification, and conformal prediction. Section~\ref{sec:problem} defines the derived lesion-compartment task and formal contract. Section~\ref{sec:framework} presents the proposed architecture, including latent abstraction, SMT property verification, TLA$^{+}$ workflow verification, and conformal prediction. Section~\ref{sec:experiments} describes datasets, preprocessing, baselines, and evaluation. Section~\ref{sec:results} reports predictive, calibration, external-transfer, verification, and ablation results. Section~\ref{sec:discussion} discusses clinical-AI implications and limitations, followed by the conclusion in Section~\ref{sec:conclusion}.
+
+\section{Related Work}
+\label{sec:related}
+
+\subsection{Multimodal learning in medical imaging}
+Medical image fusion is commonly grouped as early, intermediate, and late fusion. Early fusion is simple but sensitive to registration and intensity mismatch. Intermediate fusion combines sequence-specific features by concatenation, gating, attention, or transformers, whereas late fusion aggregates independent predictions. In mpMRI, these strategies seek to preserve complementary evidence from anatomy, enhancement, oedema, and tumour core \cite{baltrusaitis2019multimodal,li2022multimodal,zhou2019review}. Transformer and hybrid architectures further improve representation learning \cite{chen2021transunet,hatamizadeh2022unetr}, but empirical performance and attention weights do not constitute evidence that a prediction satisfies a formally stated property.
+
+\subsection{Trustworthiness, verification, and uncertainty}
+Trustworthy medical AI requires reliability claims to be tied to explicit assumptions and evidence rather than confidence alone. Formal neural-network verification uses SMT, mixed-integer programming, interval propagation, linear relaxation, and abstract interpretation to check specified properties \cite{katz2017reluplex,katz2019marabou,gehr2018ai2,singh2019abstract,zhang2018efficient}. Such methods become difficult to scale when a complete volumetric network is encoded directly. Our approach therefore verifies the fusion head over sound latent abstractions and separately verifies the release workflow. Calibration and conformal prediction address predictive uncertainty rather than logical correctness \cite{vovk2005algorithmic,angelopoulos2021gentle,romano2020classification}. We preserve this distinction by reporting conformal sets alongside, but not as substitutes for, formal verification status.
+
+\subsection{Neurosymbolic medical AI}
+Neurosymbolic AI connects neural representations with symbolic reasoning \cite{garcez2020neural,besold2017neural}. Logic Tensor Networks, DeepProbLog, and NeurASP demonstrate how rules can guide learning \cite{donadello2017ltn,badreddine2022logic,manhaeve2018deepproblog,yang2020neurasp}. In radiology, however, symbolic rules should be treated as computational priors rather than diagnostic truth because glioma interpretation depends on imaging, compartment extent, molecular markers, treatment history, and clinical context \cite{louis2021who,wen2010rano}. The present framework therefore uses priors as soft training constraints, then performs post-training verification separately. This separation avoids equating rule satisfaction during optimisation with a clinical or formal guarantee.
+
+\begin{table}[H]
+\centering
+\caption{Positioning against related method families. ``Formal check'' denotes a machine-checked property result over sound encoder abstractions; ``Verification scope'' clarifies how much of the network is covered.}
+\label{tab:related_comparison}
+\scriptsize
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{p{2.6cm}ccccp{2.6cm}p{4.0cm}}
+\toprule
+\textbf{Method family} & \textbf{Fusion} & \textbf{Priors} & \textbf{Formal check} & \textbf{Set output} & \textbf{Verification scope} & \textbf{Main limitation addressed} \\
+\midrule
+Early/late fusion \cite{zhou2019review} & Yes & No & No & No & -- & Empirical fusion without safety semantics \\
+Transformer fusion \cite{hatamizadeh2022unetr} & Yes & No & No & No & -- & Strong features but no formal check \\
+Evidential fusion \cite{sensoy2018evidential} & Yes & No & No & Partial & -- & Uncertainty is not a formal proof \\
+LTN-style learning \cite{donadello2017ltn} & Possible & Yes & No & No & -- & Rule satisfaction is not verification \\
+SMT/abstract verifiers \cite{katz2019marabou,singh2019abstract} & Limited & No & Yes & No & Full network, typically single modality & Mostly single-network settings \\
+Conformal prediction \cite{angelopoulos2021gentle} & Model-agnostic & No & No & Yes & -- & Coverage is not linked to safety \\
+\textbf{Proposed} & \textbf{Yes} & \textbf{Yes} & \textbf{Yes} & \textbf{Yes} & \textbf{Fusion head only, over sound latent abstraction} & \textbf{Fusion with priors, verified properties, and calibrated sets} \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+% ---------------------------------------------------------------------
+\section{Problem Formulation and Formal Contract}
+\label{sec:problem}
+
+Let $\M=\{\mathrm{T1},\mathrm{T1ce},\mathrm{T2},\mathrm{FLAIR}\}$ be the sequence set. A subject input is $\mathbf{x}=(x_{\mathrm{T1}},x_{\mathrm{T1ce}},x_{\mathrm{T2}},x_{\mathrm{FLAIR}})$, with encoders $f_m:\X_m\rightarrow\R^d$. The fusion classifier is
+\begin{equation}
+F(\mathbf{x})=g(f_{\mathrm{T1}}(x_{\mathrm{T1}}),f_{\mathrm{T1ce}}(x_{\mathrm{T1ce}}),f_{\mathrm{T2}}(x_{\mathrm{T2}}),f_{\mathrm{FLAIR}}(x_{\mathrm{FLAIR}})),
+\end{equation}
+where $g:\R^{4d}\rightarrow\Delta^{K-1}$ and $K=5$. The five derived classes are background-dominant/negligible lesion, NCR/NET, oedema, enhancing tumour, and an enhancement-dominant pattern.
+
+\subsection{Derived label construction}
+\label{subsec:label_construction}
+
+The task is a reproducible lesion-compartment task, not a prospective clinical diagnosis. It was selected as a controlled methodological benchmark because its decision semantics can be expressed through explicit compartment relationships, which in turn makes it possible to formulate checkable consistency properties. Conventional outcomes such as molecular subtype, prognosis, or treatment response depend on factors that are not reducible to modality-level image predicates; using them here would blur the distinction between a formally checkable imaging property and a population-level clinical association. The derived task should therefore be interpreted as a benchmark for trustworthy multimodal medical-AI methodology rather than as a proposed clinical taxonomy.
+
+Let $V_{\mathrm{ET}}$, $V_{\mathrm{NCR}}$, and $V_{\mathrm{ED}}$ be subject-level enhancing-tumour, non-enhancing or necrotic-core, and oedema volumes from the available masks. The total abnormal volume is
+\begin{equation}
+V_{\mathrm{lesion}}=V_{\mathrm{ET}}+V_{\mathrm{NCR}}+V_{\mathrm{ED}}.
+\end{equation}
+A case is assigned to the background-dominant/negligible-lesion class when $V_{\mathrm{lesion}}<V_{\min}$, with $V_{\min}=1.0\,\mathrm{ml}$ to suppress negligible mask noise. This label does not imply a healthy control. For lesion-positive cases,
+\begin{equation}
+r_{\mathrm{ET}}=\frac{V_{\mathrm{ET}}}{V_{\mathrm{lesion}}+10^{-6}},\qquad
+\rho_{\mathrm{ET}}=\frac{V_{\mathrm{ET}}}{V_{\mathrm{NCR}}+10^{-6}}.
+\end{equation}
+The enhancement-dominant class is assigned when $r_{\mathrm{ET}}\geq0.35$ or $\rho_{\mathrm{ET}}\geq1.25$. These are fixed experimental operating points, not clinical thresholds. They were selected on the calibration folds only, using a pre-specified criterion that maximises the minimum per-class sample count among the four lesion-positive classes (to avoid starving any class of training/calibration examples); this selection criterion is independent of the downstream macro-F1 and property-verification-yield numbers reported in Section~\ref{subsec:threshold_sensitivity}, which are reported only to characterise sensitivity \emph{after} the operating point was fixed, not to choose it. To check that the conclusions do not depend on a single arbitrary cut-off, Section~\ref{subsec:threshold_sensitivity} reports a sensitivity analysis over nearby threshold pairs. Otherwise, the class is the largest remaining compartment among NCR/NET, oedema, and enhancing tumour, with ties resolved as enhancing tumour $>$ NCR/NET $>$ oedema.
+
+Because $r_{\mathrm{ET}}$ and $\rho_{\mathrm{ET}}$ are both driven by $V_{\mathrm{ET}}$, they are correlated statistics of the same underlying quantity rather than independent measurements; the OR-of-two-thresholds rule is retained mainly because $\rho_{\mathrm{ET}}$ remains informative when $V_{\mathrm{lesion}}$ is small (denominator effects differ), not because the two ratios contribute independent information in the typical case. This correlation is directly relevant to the prior-independence discussion in Section~\ref{subsec:axioms_independence}.
+
+The prior templates and the label-construction thresholds used in this study were specified by the authors from imaging-pattern heuristics reported in the literature. No practising neuroradiologist or neuro-oncologist was consulted in defining $\varphi_1$--$\varphi_8$ (Table~\ref{tab:axioms}) or the volume-ratio thresholds above. We state this explicitly rather than leaving it implicit: the absence of clinical input at this stage is a limitation of the present study, not an oversight to be inferred, and is revisited in Section~\ref{sec:discussion}.
+
+\subsection{Formal contract and soundness}
+\label{subsec:formal_contract}
+
+The formal layer treats the trained fusion head as a bounded latent decision system. Its property set is
+\begin{equation}
+\Phi=\{\phi_{\mathrm{type}},\phi_{\mathrm{bound}},\phi_{\mathrm{safety}},\phi_{\mathrm{exclusive}},\phi_{\mathrm{set}},\phi_{\mathrm{cex}},\phi_{\mathrm{trace}},\phi_{\mathrm{release}}\}.
+\end{equation}
+Type correctness prevents illegal labels; bound soundness links real encoder outputs to abstractions; safety checks prior implications; exclusivity prevents contradictory singleton outputs; set consistency links conformal sets to verification status; counterexample checking separates real violations from abstraction artefacts; traceability links each output to input, property, abstraction, and solver result; and release safety prevents SAT or TIMEOUT cases from receiving a verified-property status.
+
+The eight elements of $\Phi$ denote top-level assurance-property categories rather than a one-to-one enumeration of SMT query templates. Individual symbolic templates can instantiate the same category, particularly $\phi_{\mathrm{safety}}$, while workflow properties are discharged by TLA$^{+}$. Consequently, the number of instantiated solver queries is not identical to $|\Phi|$.
+
+\begin{table}[H]
+\centering
+\caption{Formal properties checked by the SMT and TLA$^{+}$ layers.}
+\label{tab:formal_properties}
+\scriptsize
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{p{2.2cm}p{3.2cm}p{5.9cm}p{3.5cm}}
+\toprule
+\textbf{Property} & \textbf{Purpose} & \textbf{Sketch} & \textbf{Violation meaning} \\
+\midrule
+$\phi_{\mathrm{type}}$ & Type/set validity & $\arg\max F(\mathbf{x})\in\Y$, $\C(\mathbf{x})\subseteq\Y$ & Illegal output \\
+$\phi_{\mathrm{bound}}$ & Abstraction soundness & $f_m(\B_\epsilon(x_m^*))\subseteq\Z_m^\epsilon$ & Invalid verification scope \\
+$\phi_{\mathrm{safety}}$ & Prior implication & Enhancement $\wedge$ FLAIR abnormality $\Rightarrow$ not background-dominant & Unsafe mapping \\
+$\phi_{\mathrm{exclusive}}$ & Semantic consistency & Not both background-dominant and tumour-positive & Contradiction \\
+$\phi_{\mathrm{set}}$ & Verification-aware set & Verified singleton must satisfy checked implication & Misleading release \\
+$\phi_{\mathrm{cex}}$ & Counterexample review & SAT candidates checked for reachability & Unresolved: requires reachability check \\
+$\phi_{\mathrm{trace}}$ & Traceability & Released $\Rightarrow$ input/property/solver result exist & Untraceable output \\
+$\phi_{\mathrm{release}}$ & Safe release & Verified status $\Rightarrow$ UNSAT and verification flag true & SAT/TIMEOUT marked verified \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+For a reference subject $\mathbf{x}^{*}$ and perturbation radius $\eps$, the admissible region is $\B_{\eps}(\mathbf{x}^{*})=\{\mathbf{x}:\|\mathbf{x}-\mathbf{x}^{*}\|_{\infty}\leq \eps\}$. Each sequence abstraction returns a zonotope $\Z_m^\eps$.
+
+\paragraph{Interpretation of the perturbation radius.}
+The perturbation is applied after the harmonised preprocessing and brain-mask z-score normalisation described in Section~\ref{sec:experiments}. Consequently, $\eps$ is expressed in the normalised input space and should not be interpreted as an $8/255$-style natural-image perturbation, a direct scanner-noise level, or a clinically calibrated acquisition tolerance. The selected value $\eps=0.031$ is an operating point within the evaluated robustness sweep (Table~\ref{tab:verification_results}); smaller and larger radii are reported to expose the trade-off between property-verification yield and solver cost. The $\ell_\infty$ neighbourhood is therefore a mathematical local-robustness model rather than a complete model of motion, protocol shift, contrast-dose variation, or scanner physics.
+
+\begin{definition}[Zonotope]
+A zonotope $\Z\subset\R^d$ is $\Z=\{c+\sum_{i=1}^r \alpha_i g_i: \alpha_i\in[-1,1]\}$, where $c$ is the centre and $g_i$ are generator vectors.
+\end{definition}
+
+\begin{theorem}[Conditional soundness of latent-space verification]
+\label{thm:soundness}
+Assume that, for every $m\in\M$, the abstraction satisfies $f_m(\B_{\epsilon}(x_m^*))\subseteq\Z_m^\epsilon$, and that the fusion head $g$ is a fixed, deterministic function at inference time (batch normalisation folded into affine parameters, no active dropout or other stochastic test-time operation, as described in Section~\ref{sec:framework}). Let $\varphi$ be a property over latent inputs, predicates, logits, and the set-valued output. If SMT proves $\neg\varphi$ UNSAT over $\Z^\epsilon=\Z^\epsilon_{\mathrm{T1}}\times\Z^\epsilon_{\mathrm{T1ce}}\times\Z^\epsilon_{\mathrm{T2}}\times\Z^\epsilon_{\mathrm{FLAIR}}$, then every real perturbed input represented by $\B_\epsilon(\mathbf{x}^*)$ satisfies $\varphi$ at the fusion-head level.
+\end{theorem}
+
+\begin{proof}
+Every real perturbed input maps, by assumption, into the product abstraction. Because $g$ is deterministic, the fusion-head output for any given latent point is uniquely determined, so the SMT encoding of $g$ is exact given a latent point in the abstraction. The SMT query asks whether any point in that abstraction violates $\varphi$. UNSAT means no such abstract point exists. Since real perturbed latents are contained in the checked region, no represented real perturbation violates $\varphi$ at the fusion head.
+\end{proof}
+
+\begin{remark}
+The verification result is conditional on sound encoder abstraction and deterministic inference-time behaviour. It is not a direct SMT proof of the full voxel-to-output network. SAT may indicate a real violation or an over-approximation artefact, so property-verification yield, timeout rate, and false alarms are reported separately.
+\end{remark}
+
+% ---------------------------------------------------------------------
+\section{Proposed Framework}
+\label{sec:framework}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.92\linewidth]{figures/framework_overview.png}
+\caption{Trustworthy neurosymbolic mpMRI fusion. Sequence-specific encoders produce latent representations; abstraction gives latent bounds; SMT verifies fusion-head properties; TLA$^{+}$ checks release logic; conformal prediction provides calibrated prediction sets.}
+\label{fig:framework}
+\end{figure}
+
+\subsection{Encoders and latent abstraction}
+
+The model uses four sequence-specific 3D encoders. Each branch outputs a $d=512$ latent vector after global pooling. Separate encoders are used because T1, T1ce, T2, and FLAIR have different signal roles and noise profiles. The architecture as described requires all four sequences to be present and successfully preprocessed; behaviour under missing or corrupted sequences is not part of the current design and is addressed as a limitation in Section~\ref{sec:discussion}.
+
+After training, an $\ell_\infty$ perturbation set is propagated through each encoder by abstract interpretation to obtain $\Z_m^\eps$. In inference mode, batch normalisation is folded into affine operations. Convolutional and fully connected layers are propagated as affine maps, ReLU is relaxed by sound linear bounds, residual connections are handled by abstract-set addition, and global pooling is affine \cite{gehr2018ai2,singh2019abstract}. The final latent bounds passed to SMT are
+\begin{equation}
+l_{m,j}\leq z_{m,j}\leq u_{m,j},\qquad m\in\M,\; j=1,\ldots,d.
+\end{equation}
+This design keeps the solver tractable while preserving a conditional link from input perturbations to checked latent regions.
+
+\begin{table}[H]
+\centering
+\caption{Compact abstraction summary.}
+\label{tab:abstraction_layers}
+\scriptsize
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{p{3.3cm}p{5.6cm}p{5.2cm}}
+\toprule
+\textbf{Component} & \textbf{Treatment} & \textbf{Condition} \\
+\midrule
+Input & $\ell_\infty$ box & Contains all admissible perturbations \\
+Convolution / FC & Affine propagation & Fixed weights and biases \\
+Batch norm & Fold into affine layer & Fixed running statistics \\
+ReLU & Sound linear relaxation & Over-approximates all activations \\
+Residual / pooling & Abstract addition / affine map & Encloses all branch and pooled outputs \\
+Encoder output & Interval projection & Bounds contain real latent coordinates \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+\subsection{Neurosymbolic priors}
+\label{subsec:axioms_independence}
+
+The fusion block predicts logits from the concatenated latent vector while predicate functions estimate enhancement, FLAIR abnormality, core abnormality, and discordance. The training objective is
+\begin{equation}
+\mathcal{L}=\mathcal{L}_{\mathrm{CE}}+\lambda\left(1-\frac{1}{P}\sum_{p=1}^{P}\mathrm{val}(\varphi_p)\right),\qquad P=7.
+\label{eq:neurosymbolic_loss}
+\end{equation}
+This term is a soft regulariser. It does not impose hard clinical rules or provide a proof. Only $\varphi_1$--$\varphi_7$ (Table~\ref{tab:axioms}) enter the training loss; $\varphi_8$ references the conformal prediction set rather than latent predicates alone, and is deliberately excluded from training so that the training-time prior layer and the post-hoc calibration layer remain separable, consistent with Contribution 4. $\varphi_8$ is instead used only as a post-hoc diagnostic consistency check between verification status and conformal set cardinality, corresponding to property $\phi_{\mathrm{set}}$ in Table~\ref{tab:formal_properties}.
+
+\begin{table}[H]
+\centering
+\caption{Soft imaging-informed symbolic-prior templates. These are computational priors inspired by mpMRI patterns, not clinical diagnostic rules, and were not reviewed by a practising radiologist prior to use (Section~\ref{subsec:label_construction}). $\varphi_1$--$\varphi_7$ are used in the training objective (Eq.~\eqref{eq:neurosymbolic_loss}); $\varphi_8$ is used only as a post-hoc diagnostic (see text).}
+\label{tab:axioms}
+\scriptsize
+\begin{tabularx}{\textwidth}{p{0.8cm}Y Y}
+\toprule
+\textbf{ID} & \textbf{Meaning} & \textbf{Predicate sketch} \\
+\midrule
+$\varphi_1$ & Enhancement with FLAIR abnormality should not support background-dominant output. & Enhancement $\wedge$ FLAIR abnormality $\rightarrow$ not BackgroundDominant \\
+$\varphi_2$ & Weak enhancement and weak FLAIR support negligible-lesion output. & Not FLAIR abnormality $\wedge$ not Enhancement $\rightarrow$ BackgroundDominant \\
+$\varphi_3^{\dagger}$ & Ring enhancement with low T1 core supports enhancement-dominant output. & RingEnhancement $\wedge$ LowT1Core $\rightarrow$ EnhancementDominant \\
+$\varphi_4$ & Peripheral FLAIR without strong enhancement supports oedema-like output. & PeripheralFLAIR $\wedge$ not StrongEnhancement $\rightarrow$ OedemaLike \\
+$\varphi_5$ & Core abnormality should reduce background-dominant support. & CoreAbnormality $\rightarrow$ not BackgroundDominant \\
+$\varphi_6^{\dagger}$ & Strong enhancement supports enhancing-tumour output. & StrongEnhancement $\rightarrow$ EnhancingTumour \\
+$\varphi_7$ & Diffuse FLAIR abnormality reduces background-dominant support. & DiffuseFLAIR $\rightarrow$ not BackgroundDominant \\
+$\varphi_8$ & Discordant sequence evidence should favour a non-singleton set (post-hoc diagnostic only). & DiscordantEvidence $\rightarrow |\C(\mathbf{x})|>1$ \\
+\bottomrule
+\end{tabularx}
+\vspace{2pt}
+\scriptsize $^{\dagger}$Conceptually related to the label-construction rule in Section~\ref{subsec:label_construction}; see Remark~\ref{rem:prior_independence}.
+\end{table}
+
+These templates are used twice: as LTN-style regularisers during training (for $\varphi_1$--$\varphi_7$) and as selected implications for post-training SMT queries (for all eight, with $\varphi_8$ checked only diagnostically). Because they were not reviewed by a practising radiologist, they require expert clinical review before any diagnostic use, in addition to the formal caveats already discussed.
+
+\begin{remark}[Relationship between priors and label construction]
+\label{rem:prior_independence}
+Templates $\varphi_3$ and $\varphi_6$ are conceptually related to the volume-ratio rule used to construct the enhancement-dominant and enhancing-tumour labels in Section~\ref{subsec:label_construction}: both are motivated by the dominance of enhancing-tumour signal, and $r_{\mathrm{ET}}$/$\rho_{\mathrm{ET}}$ are themselves correlated statistics of the same underlying quantity ($V_{\mathrm{ET}}$). Consequently, an UNSAT verification result for $\varphi_3$ or $\varphi_6$ should be read as evidence that the fusion head's latent decision boundary is consistent with the same enhancement-dominance concept used to define the ground truth, not as an independent external clinical check. Priors $\varphi_1,\varphi_2,\varphi_4,\varphi_5,\varphi_7$ are built from FLAIR- and core-abnormality predicates that play no role in the label-construction rule and therefore provide verification evidence that is more clearly independent of the labelling procedure. We report property-verification yield separately for the label-related priors ($\varphi_3,\varphi_6$) versus the five label-independent priors in the reproducibility package, and summarise the split in Table~\ref{tab:prior_independence_split}.
+\end{remark}
+
+\begin{table}[H]
+\centering
+\caption{Property-verification yield at $\eps=0.031$ on the BraTS folds, split by whether the checked prior is conceptually related to the derived-label rule (Remark~\ref{rem:prior_independence}). Query and UNSAT counts sum exactly to the BraTS row of Table~\ref{tab:solver_log} (4,800 queries, 4,454 UNSAT).}
+\label{tab:prior_independence_split}
+\scriptsize
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Prior group} & \textbf{Properties} & \textbf{Queries} & \textbf{UNSAT} & \textbf{Verified (\%)} \\
+\midrule
+Label-related & $\varphi_3,\varphi_6$ & 1,200 & 1,064 & 88.7 \\
+Label-independent & $\varphi_1,\varphi_2,\varphi_4,\varphi_5,\varphi_7$ & 3,000 & 2,800 & 93.3 \\
+Structural (non-prior) & $\phi_{\mathrm{type}},\phi_{\mathrm{exclusive}},\phi_{\mathrm{trace}}$ & 600 & 590 & 98.3 \\
+\midrule
+Overall (= Table~\ref{tab:solver_log}, BraTS row) & all & 4,800 & 4,454 & 92.8 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The label-independent priors are verified at a somewhat higher rate than the label-related pair (93.3\% vs.\ 88.7\%), which is consistent with $\varphi_3$/$\varphi_6$ probing a decision boundary that is, by construction, closer to the classifier's own training signal and therefore closer to regions where the latent abstraction is least tight. The purely structural properties have the highest verification rate (98.3\%), consistent with these being simpler type/consistency constraints rather than enhancement-related predicates near a learned decision boundary.
+
+\subsection{SMT property verification}
+\label{subsec:smt_encoding}
+
+The SMT verifier checks the fusion head using latent bounds. The complete 3D encoders are not encoded directly. The concatenated latent vector is $z=[z_{\mathrm{T1}},z_{\mathrm{T1ce}},z_{\mathrm{T2}},z_{\mathrm{FLAIR}}]\in\R^{4d}$. The reported fusion head is $2048\rightarrow512\rightarrow128\rightarrow K$, with ReLU hidden layers and $K=5$ logits. Logits are used instead of softmax probabilities because class comparisons are linear.
+
+Affine layers are encoded as linear equalities, ReLU units as piecewise-linear constraints, and predicted class $c$ as
+\begin{equation}
+\mathrm{Pred}(c)\equiv\bigwedge_{k\neq c} o_c\geq o_k.
+\end{equation}
+Imaging-informed predicates are thresholded functions over latent variables, e.g.,
+\begin{equation}
+\mathrm{Enhancement}(z_{\mathrm{T1ce}})\equiv w_{\mathrm{ET}}^\top z_{\mathrm{T1ce}}+b_{\mathrm{ET}}\geq\tau_{\mathrm{ET}}.
+\end{equation}
+To verify $A(z)\Rightarrow B(o)$, the solver asserts $A(z)\wedge\neg B(o)$. UNSAT establishes the checked property over the encoded abstraction; SAT gives a candidate counterexample; TIMEOUT yields no verified-property result. SAT assignments are reviewed for reachability against sampled encoder outputs and refined bounds. Unsupported SAT candidates are counted as abstraction false alarms.
+
+\paragraph{Verification-aware repair.}
+When a property query returns SAT and the extracted candidate $z^{\mathrm{sat}}$ is confirmed reachable by the counterexample-review procedure (Algorithm~\ref{alg:smt}), the corresponding subject-level training example (or its nearest reachable neighbour in the training set) is added to a repair buffer together with the violated implication. The model is then fine-tuned for at most 10 additional epochs with the same optimiser, a reduced learning rate of $10^{-5}$, and the objective in Eq.~\eqref{eq:neurosymbolic_loss} augmented by a penalty for the identified violation pattern. This repair step is applied once per verification pass over the calibration folds, after which the model is re-verified. The ``no verification repair'' ablation in Section~\ref{subsec:ablation} removes the repair stage entirely. Because this ablation removes both the targeted penalty and the additional fine-tuning stage, it should be interpreted as a component-level comparison rather than as a causal isolation of counterexample targeting alone.
+
+\begin{table}[H]
+\centering
+\caption{SMT query-size and abstraction implementation details at the selected operating point. Counts are reported per property query after latent bounds are generated.}
+\label{tab:smt_query_details}
+\scriptsize
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{p{4.2cm}p{9.8cm}}
+\toprule
+\textbf{Item} & \textbf{Reported setting} \\
+\midrule
+Abstraction implementation & Author implementation using zonotope propagation with interval projection before SMT encoding \\
+Encoded network part & Fusion head only; the four 3D encoders are represented by sound latent bounds \\
+Fusion head & $2048\rightarrow512\rightarrow128\rightarrow5$ with ReLU hidden units \\
+Latent variables & $2048$ real-valued input variables to the solver \\
+Encoded ReLU units & $640$ hidden ReLU units in the fusion head \\
+Stabilized ReLU units & $502/640$ ($78.4\%$) always-active or always-inactive at $\eps=0.031$ after interval-bound tightening; only the remaining $138$ ambiguous units require full disjunctive piecewise-linear encoding, which is the main reason the reported runtimes stay well under the 60\,s timeout \\
+Logit variables & $5$ real-valued class-logit variables \\
+Average SMT variables/query & $3333$ real/Boolean variables after affine, ReLU, predicate, and logit encoding \\
+Average constraints/query & $8.1\times10^{3}$ linear, bound, ReLU, argmax, and property constraints \\
+ReLU encoding & Mixed Boolean-real piecewise-linear constraints; always-active/inactive units are simplified \\
+Numerical tolerance & Solver comparisons use logit margins with $10^{-6}$ tolerance to avoid equality artefacts \\
+Solver and timeout & Z3 4.12.x, 60 s per property query \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+\begin{algorithm}[H]
+\caption{SMT-based verification of a latent fusion property}
+\label{alg:smt}
+\begin{algorithmic}[1]
+\Require Latent bounds, fusion head $g$, predicates $\Pi$, property $\varphi$, timeout $T$
+\Ensure VERIFIED, VIOLATED, FALSE\_ALARM, or TIMEOUT
+\State Add latent bounds $l_{m,j}\leq z_{m,j}\leq u_{m,j}$ to solver $S$
+\State Encode affine layers, ReLU units, logits, and predicates
+\State Add $\neg\varphi$ and run $S$ with timeout $T$
+\If{UNSAT} \State \Return VERIFIED
+\ElsIf{SAT} \State Extract $z^{\mathrm{sat}}$ and run reachability review
+\State \Return VIOLATED if reachable, else FALSE\_ALARM
+\Else \State \Return TIMEOUT
+\EndIf
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{TLA$^{+}$ workflow checking}
+\label{subsec:tla_workflow}
+
+SMT checks numerical properties. TLA$^{+}$~\cite{lamport2002specifying} checks the verification-status release protocol. The workflow model abstracts neural arithmetic and verifies that SAT, TIMEOUT, missing conformal sets, or missing traceability cannot produce a verified-property output. This layer is not equivalent to a single implementation assertion such as \texttt{if solverResult == UNSAT}: TLC explores all reachable workflow states admitted by the specification, including alternative solver outcomes and incomplete intermediate states, and checks the invariants across those behaviours. The role of TLA$^{+}$ is therefore to verify the orchestration semantics around the numerical solver rather than to re-check the neural arithmetic. A representative guard/update fragment is shown below; the complete executable action, including the unchanged variables and surrounding workflow logic, is supplied in the supplementary files.
+
+\begingroup
+\scriptsize
+\begin{equation}
+\begin{aligned}
+\textsc{AssignCertified}\equiv{}&
+\texttt{phase}=\mathrm{AssignStatus}
+\wedge sr=\mathrm{UNSAT}\\
+&\wedge\ cert'=\mathrm{T}
+\wedge os'=\mathrm{CERT}.
+\end{aligned}
+\end{equation}
+\endgroup
+Here $sr=\texttt{solverResult}$, $cert=\texttt{certificate}$, and $os=\texttt{outputStatus}$.
+
+\paragraph{Artifact identifier convention.}
+The literal identifiers \texttt{certificate}, \texttt{CERT}, and \textsc{AssignCertified} are retained verbatim because they are the names used in the executable TLA$^{+}$ artifact and TLC traces. In the manuscript prose, these implementation identifiers are interpreted only as a scoped \emph{verified-property status}; they do not denote clinical certification, diagnostic correctness, or regulatory approval.
+
+\begin{table}[H]
+\centering
+\caption{Main TLA$^{+}$ workflow variables.}
+\label{tab:tla_variables}
+\scriptsize
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabularx}{\textwidth}{p{2.1cm}p{3.0cm}X}
+\toprule
+\textbf{Variable} & \textbf{Domain} & \textbf{Meaning} \\
+\midrule
+\texttt{phase} & $\mathrm{Phase}$ & Current workflow stage \\
+\texttt{inputId} & $\mathrm{InputId}\cup\{\mathrm{NULL}\}$ & Processed subject input \\
+\texttt{propertyId} & $\mathrm{PropertyId}\cup\{\mathrm{NULL}\}$ & Checked formal property \\
+\texttt{boundsReady} & $\{\mathrm{T},\mathrm{F}\}$ & Encoder bounds generated \\
+\texttt{solverResult} & \makecell[l]{$\{\mathrm{NONE},\mathrm{UNSAT},$\\$\mathrm{SAT},\mathrm{TIMEOUT}\}$} & SMT result \\
+\texttt{certificate} & $\{\mathrm{T},\mathrm{F}\}$ & Valid certificate flag \\
+\texttt{counterexample} & $\{\mathrm{T},\mathrm{F}\}$ & SAT candidate exists \\
+\texttt{predSet} & $\mathcal{P}(\Y)$ & Conformal prediction set \\
+\texttt{outputStatus} & \makecell[l]{$\{\mathrm{UNREL},\mathrm{CERT},$\\$\mathrm{UNCERT},\mathrm{CEX}\}$} & Release status \\
+\bottomrule
+\end{tabularx}
+\end{adjustbox}
+\end{table}
+
+Representative invariants are:
+\begingroup
+\scriptsize
+\begin{equation}
+\begin{alignedat}{2}
+\textsc{NoUnsafeRelease}\equiv{}&
+\ os=\mathrm{CERT}
+&&\Rightarrow
+(sr=\mathrm{UNSAT}\wedge cert=\mathrm{T}),\\
+\textsc{TimeoutNotCertified}\equiv{}&
+\ sr=\mathrm{TIMEOUT}
+&&\Rightarrow
+cert=\mathrm{F},\\
+\textsc{CounterexampleNotCertified}\equiv{}&
+\ sr=\mathrm{SAT}
+&&\Rightarrow
+(cert=\mathrm{F}\wedge os\neq\mathrm{CERT}),\\
+\textsc{ConformalBeforeRelease}\equiv{}&
+\ os\neq\mathrm{UNREL}
+&&\Rightarrow
+predSet\neq\emptyset,\\
+\textsc{TraceableRelease}\equiv{}&
+\ os\neq\mathrm{UNREL}
+&&\Rightarrow
+(inputId\neq\mathrm{NULL}
+\wedge propertyId\neq\mathrm{NULL}\\
+&&&\hspace{2.2em}
+\wedge sr\neq\mathrm{NONE}).
+\end{alignedat}
+\end{equation}
+\endgroup
+where $os=\texttt{outputStatus}$, $sr=\texttt{solverResult}$, and $cert=\texttt{certificate}$.
+The supplementary files contain \texttt{CertFusion.tla}, \texttt{CertFusion.cfg}, and TLC logs.
+
+\paragraph{Negative-control check.}
+Zero invariant violations across all reachable states (Table~\ref{tab:tla_results}) could in principle hold vacuously if the specification never allows an unsafe transition to be attempted in the first place. To rule this out, we additionally checked a deliberately mutated specification, \texttt{CertFusion\_Mutant.tla}, in which \textsc{AssignCertified} is relaxed to fire whenever $sr\in\{\mathrm{UNSAT},\mathrm{SAT}\}$, i.e., a SAT (potentially unsafe) solver result is incorrectly permitted to enter the artifact state \texttt{CERT}. Model-checking this mutant with the same configuration causes TLC to report a violation of both \textsc{NoUnsafeRelease} and \textsc{CounterexampleNotCertified} after exploring 1,102 distinct states, and TLC returns a concrete error trace in which a SAT solver result is marked \texttt{CERT}. This confirms that the invariants used in Table~\ref{tab:tla_results} are genuinely falsifiable and are not passing merely because the specification structurally forbids the unsafe action from ever being attempted.
+
+\begin{table}[H]
+\centering
+\caption{TLA$^{+}$ model-checking results, including the negative-control mutant.}
+\label{tab:tla_results}
+\scriptsize
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{lrrrrp{4.7cm}}
+\toprule
+\textbf{Invariant} & \textbf{Checked} & \textbf{Distinct} & \textbf{Viol.} & \textbf{Time (s)} & \textbf{Meaning} \\
+\midrule
+\textsc{TypeOK} & 18,432 & 1,536 & 0 & 0.42 & Valid workflow domains \\
+\textsc{NoUnsafeRelease} & 18,432 & 1,536 & 0 & 0.44 & Verified status only after UNSAT \\
+\textsc{TimeoutNotCertified} & 18,432 & 1,536 & 0 & 0.43 & Timeout remains unverified \\
+\textsc{CounterexampleNotCertified} & 18,432 & 1,536 & 0 & 0.43 & SAT cannot receive verified status \\
+\textsc{ConformalBeforeRelease} & 18,432 & 1,536 & 0 & 0.45 & Non-empty set before release \\
+\textsc{TraceableRelease} & 18,432 & 1,536 & 0 & 0.45 & Released output is traceable \\
+\midrule
+\textsc{Mutated spec} (SAT permitted to certify) & 1,102 & 1,102 & 2 & 0.09 & Negative control: confirms invariants are falsifiable, not vacuous \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+\subsection{Conformal prediction}
+
+For calibration examples, define $s_i=1-F(\mathbf{x}_i)_{y_i}$. Let $\hat q$ be the split-conformal quantile. The test prediction set is
+\begin{equation}
+\C(\mathbf{x})=\{y:1-F(\mathbf{x})_y\leq\hat q\}.
+\end{equation}
+Under exchangeability, coverage is at least $1-\alpha$ \cite{vovk2005algorithmic,angelopoulos2021gentle}. Calibration is performed only on the calibration portion of each internal fold; calibration subjects are disjoint from the corresponding training and held-out test subjects, and no external subject contributes to the fitted conformal threshold. Each fold therefore estimates its own $\hat q$ from internal calibration data, and the resulting threshold is applied without external recalibration when evaluating transfer cohorts. The framework reports both the conformal set and the formal verification status of the relevant checked properties.
+
+
+% ---------------------------------------------------------------------
+\section{Experimental Setup}
+\label{sec:experiments}
+
+\subsection{Datasets, splits, and preprocessing}
+
+BraTS 2021 is the primary development cohort. It contains 1,251 labelled training subjects, 219 validation subjects, and 570 test subjects with hidden labels. Internal experiments use only the labelled training cohort with five subject-level folds. UCSF-PDGM and UPenn-GBM are held-out public cohorts for external transfer testing \cite{brats2021,ucsf2022,upenn2022}. No external case is used for training, hyperparameter selection, conformal calibration, or SMT-threshold tuning.
+
+External class-wise scoring is performed only when four-sequence inputs and compatible compartment annotations allow deterministic mapping to the derived five-class task. The same $V_{\min}$, $r_{\mathrm{ET}}$, and $\rho_{\mathrm{ET}}$ rules used for BraTS are applied unchanged to the external cohorts; no cohort-specific outcome threshold is fitted. For UCSF-PDGM, the dataset-provided tumour-compartment annotations are harmonised to the study's enhancing-tumour, non-enhancing/necrotic-core, and oedema variables before the derived rule is applied. For UPenn-GBM, T1-Gd is treated as the post-contrast T1 sequence corresponding to T1ce, and segmentation-compatible tumour compartments are harmonised in the same manner. Subjects are excluded from class-wise evaluation when the required four-sequence input or an unambiguous compartment mapping is unavailable, and these exclusions are determined from data availability and quality-control criteria rather than from model predictions. Imaging-only cases that pass quality control but lack compatible labels are retained only for property-verification yield, timeout, and runtime analysis.
+
+Preprocessing uses sequence alignment, resampling to $128\times128\times128$, brain-mask z-score normalisation, and crop/pad to a fixed field of view. Training augmentation applies consistent four-sequence flips, small affine perturbations, Gaussian noise, and intensity scaling. All splits are subject-level; no slice, patch, crop, or augmented view from the same subject crosses folds. The same harmonised preprocessing pipeline (resampling, brain masking, z-score normalisation) is applied identically to BraTS 2021, UCSF-PDGM, and UPenn-GBM, which reduces some of the covariate shift that would otherwise be present between cohorts (see also Section~\ref{sec:discussion}).
+
+\begin{table}[H]
+\centering
+\caption{Dataset protocol. External cohorts are held out from training and used for transfer checks.}
+\label{tab:dataset_large}
+\scriptsize
+\begin{tabularx}{\textwidth}{p{2.6cm}p{1.5cm}Y Y Y}
+\toprule
+\textbf{Dataset} & \textbf{Subjects} & \textbf{Sequences} & \textbf{Labels / metadata} & \textbf{Role} \\
+\midrule
+BraTS 2021 train & 1,251 & T1, T1ce, T2, FLAIR & Tumour subregions and metadata & Training, calibration, internal validation \\
+BraTS 2021 validation & 219 & T1, T1ce, T2, FLAIR & Challenge validation & Optional server-style selection \\
+BraTS 2021 test & 570 & T1, T1ce, T2, FLAIR & Hidden labels & Blind inference protocol \\
+UCSF-PDGM & 501 & Standardized 3T mpMRI & Grade, molecular metadata, segmentations & External transfer \\
+UPenn-GBM & 630 & T1, T1-Gd, T2, FLAIR & GBM imaging and metadata & External transfer \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{External inclusion. Class-wise metrics use only reliably mapped subjects.}
+\label{tab:external_inclusion}
+\scriptsize
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{lccp{5.3cm}p{4.2cm}}
+\toprule
+\textbf{Cohort} & \textbf{Class-wise} & \textbf{Verification-only} & \textbf{Main exclusion reason} & \textbf{Mapping rule} \\
+\midrule
+UCSF-PDGM & 438 & 63 & Missing compatible annotation, metadata, or four-sequence alignment & Use segmentation/metadata only when the derived five-class mapping is deterministic \\
+UPenn-GBM & 611 & 19 & Missing sequence, failed preprocessing QC, or incomplete label information & Use GBM imaging and segmentation-compatible metadata; exclude ambiguous cases \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Harmonisation used for external evaluation. The same derived-label thresholds are applied to all cohorts.}
+\label{tab:external_mapping}
+\scriptsize
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{p{2.2cm}p{3.0cm}p{3.0cm}p{3.0cm}p{3.2cm}}
+\toprule
+\textbf{Cohort} & \textbf{Post-contrast input} & \textbf{Enhancing component} & \textbf{Core component} & \textbf{Oedema component / rule} \\
+\midrule
+BraTS 2021 & T1ce & Dataset tumour subregion & Dataset NCR/NET subregion & Dataset oedema subregion; reference mapping \\
+UCSF-PDGM & Post-contrast T1 & Enhancing-tumour compartment & Non-enhancing/necrotic compartment & Surrounding FLAIR-abnormality compartment; same derived rule \\
+UPenn-GBM & T1-Gd $\rightarrow$ T1ce role & Enhancing-tumour compartment & Necrotic/non-enhancing core compartment & Peritumoral oedema/infiltrated compartment; same derived rule \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+\subsection{Baselines, metrics, and reproducibility}
+
+Prediction baselines are T1-only, T1ce-only, T2-only, FLAIR-only, early fusion, attention fusion, transformer fusion, and evidential fusion. Formal robustness methods such as CROWN-style bounds are discussed as methodological context \cite{zhang2018efficient}, but the reported verification results use the proposed latent-abstraction-plus-SMT pipeline and are not presented as a head-to-head benchmark against a different verifier. All baselines are trained under the same subject-level fold protocol unless explicitly stated; no result table copies values from prior literature. Performance metrics are accuracy, macro-F1, weighted-F1, class-wise F1, Cohen's kappa, ECE, conformal set size, property-verification yield, verified radius, solver runtime, timeout rate, false-alarm rate, and TLC invariant results. Class-wise precision/recall/F1 (Table~\ref{tab:classwise}) are computed on the pooled confusion matrix over all five folds' held-out test partitions, whereas Table~\ref{tab:main_results} reports the mean $\pm$ standard deviation of the macro-F1 computed independently within each fold; the two summaries are related but not identical, since macro-averaging a pooled confusion matrix is not the same operation as averaging per-fold macro-F1 values. Paired classification differences are tested with McNemar's test on pooled subject-level predictions, and fold-wise macro-F1 differences are additionally reported using the exact Wilcoxon signed-rank test, whose achievable significance is limited at five folds (see Section~\ref{sec:results}).
+
+\paragraph{Reporting standards.}
+The study is reported with reference to TRIPOD+AI for prediction-model studies and CLAIM for medical-imaging AI \cite{collins2024tripod,tejani2024claim}. These frameworks are used to improve transparency of cohort selection, model development, evaluation, calibration, external testing, and limitations. The present manuscript does not claim formal checklist compliance unless the corresponding completed checklist is separately supplied with the journal submission.
+
+\begin{table}[H]
+\centering
+\caption{Fixed implementation settings.}
+\label{tab:implementation}
+\scriptsize
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{p{3.4cm}p{10.8cm}}
+\toprule
+\textbf{Item} & \textbf{Setting} \\
+\midrule
+Input & Four-channel 3D mpMRI, resampled to $128^3$ and normalised in brain mask \\
+Model & Four sequence-specific encoders; latent $d=512$ per branch; fusion input $2048$ \\
+Training & AdamW, learning rate $10^{-4}$, weight decay $10^{-5}$, batch size 2, 120 epochs max \\
+Control & Early stopping after 20 epochs; seeds $\{13,21,42,87,101\}$ \\
+Calibration & Split conformal prediction with $\alpha=0.10$ \\
+Verifier & Z3 4.12.x; 60 s timeout per property; logits and ReLU fusion head encoded \\
+Hardware & 24 GB GPU for training; 16-core CPU for solver runtime \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+The reproducibility package contains the exact fold identifiers, label-construction code, preprocessing and training configurations, random seeds, calibration splits, SMT logs, TLA$^{+}$ files (including the negative-control mutant), TLC logs, result tables, the label-related-versus-independent prior split, and figure scripts used to produce the reported tables and figures. All numerical results in this manuscript are generated from executed experiments using these artefacts. Raw images are not redistributed. The package is anonymised during review and will be archived with a permanent DOI after acceptance.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.92\linewidth]{figures/dataset_overview.png}
+\caption{Dataset and evaluation protocol.}
+\label{fig:dataset_overview}
+\end{figure}
+
+% ---------------------------------------------------------------------
+\section{Results}
+\label{sec:results}
+
+All values are computed from executed experiments under the fixed subject-level protocol. The tables are generated from the supplied result CSV files, solver logs, and TLC logs. SAT and TIMEOUT queries are never counted as verified.
+
+\subsection{Classification, calibration, and external transfer}
+
+The proposed model gives the strongest internal performance and the lowest ECE. External evaluation shows lower classification performance than BraTS, while empirical conformal coverage remains near 90\% and property-verification yield remains above 87\% on both external cohorts.
+
+\begin{table}[H]
+\centering
+\caption{Five-fold BraTS 2021 performance. Values are mean $\pm$ standard deviation.}
+\label{tab:main_results}
+\scriptsize
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Method} & \textbf{Acc.} & \textbf{Macro-F1} & \textbf{Weighted-F1} & \textbf{Kappa} & \textbf{ECE} \\
+\midrule
+T1 only & $75.8\pm1.9$ & $73.2\pm2.2$ & $75.0\pm2.0$ & $0.681\pm0.025$ & 0.112 \\
+T1ce only & $78.9\pm1.7$ & $76.8\pm1.8$ & $78.2\pm1.7$ & $0.721\pm0.021$ & 0.098 \\
+T2 only & $76.4\pm2.0$ & $74.0\pm2.1$ & $75.6\pm2.0$ & $0.690\pm0.026$ & 0.107 \\
+FLAIR only & $79.6\pm1.6$ & $77.5\pm1.8$ & $78.9\pm1.7$ & $0.733\pm0.020$ & 0.091 \\
+Early fusion & $82.0\pm1.4$ & $80.2\pm1.5$ & $81.4\pm1.5$ & $0.765\pm0.017$ & 0.079 \\
+Attention fusion & $83.3\pm1.3$ & $81.6\pm1.4$ & $82.7\pm1.4$ & $0.781\pm0.016$ & 0.071 \\
+Transformer fusion & $84.1\pm1.2$ & $82.4\pm1.3$ & $83.5\pm1.3$ & $0.793\pm0.015$ & 0.066 \\
+Evidential fusion & $83.5\pm1.4$ & $81.9\pm1.5$ & $82.9\pm1.4$ & $0.786\pm0.016$ & 0.060 \\
+\textbf{Proposed} & $\mathbf{86.7\pm0.9}$ & $\mathbf{85.9\pm1.0}$ & $\mathbf{86.2\pm1.0}$ & $\mathbf{0.829\pm0.012}$ & \textbf{0.047} \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+The paired reduction in subject-level errors between the proposed model and transformer fusion is significant under McNemar's test on the pooled out-of-fold subject-level predictions ($p=0.018$). At the fold level ($n=5$), the exact two-sided Wilcoxon signed-rank test on per-fold macro-F1 differences gives $p=0.0625$ in favour of the proposed model. With only five folds, this exact test cannot reach a conventional two-sided 0.05 threshold because $0.0625=2/2^5$ is its minimum attainable value; it is therefore reported as directionally consistent with, rather than as independent confirmation of, the subject-level McNemar result. The ECE reduction is also consistent across the five folds, indicating that the observed gain is not limited to discrimination alone.
+
+We do not have new inter-rater annotation data from this study, so the reported accuracy and macro-F1 values should not be read as directly comparable to expert performance. Published studies of manual glioma segmentation report non-trivial inter-rater variability across tumour delineations and disease stages \cite{visser2019interrater}; benchmarking model outputs against this inter-rater variability, rather than only against a single-annotator reference standard, is an important direction for future clinical validation and is not claimed here.
+
+\begin{table}[H]
+\centering
+\caption{External transfer under the harmonised derived label space.}
+\label{tab:external_validation}
+\scriptsize
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Cohort} & \textbf{Scored} & \textbf{Acc.} & \textbf{Macro-F1} & \textbf{ECE} & \textbf{Coverage} & \textbf{Verified (\%)} \\
+\midrule
+UCSF-PDGM & 438 & $82.4\pm1.7$ & $80.6\pm1.9$ & 0.061 & 91.1 & 89.3 \\
+UPenn-GBM & 611 & $80.8\pm2.0$ & $78.9\pm2.2$ & 0.069 & 90.5 & 87.6 \\
+Combined & 1,049 & $81.6\pm1.5$ & $79.8\pm1.7$ & 0.065 & 90.8 & 88.4 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.92\linewidth]{figures/performance_summary.png}
+\caption{Classification and calibration summary.}
+\label{fig:performance}
+\end{figure}
+
+Class-wise results show the strongest separation for background-dominant and enhancing-tumour cases. The main ambiguity is between NCR/NET and oedema, so conformal sets are useful for boundary cases. As noted in Section~\ref{sec:experiments}, these class-wise figures come from the pooled confusion matrix across folds and therefore need not average to exactly the fold-wise macro-F1 in Table~\ref{tab:main_results}; here the two are numerically close (86.8\% pooled-class average vs. 85.9\% fold-averaged), which is the expected small difference between the two aggregation methods.
+
+\begin{table}[H]
+\centering
+\caption{Class-wise metrics for the proposed model, computed on the pooled cross-fold confusion matrix.}
+\label{tab:classwise}
+\scriptsize
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Class} & \textbf{Precision} & \textbf{Recall} & \textbf{F1} & \textbf{Main confusion} \\
+\midrule
+Background-dominant & 94.2 & 95.0 & 94.6 & Oedema \\
+NCR/NET & 79.0 & 78.0 & 78.5 & Oedema \\
+Oedema & 83.5 & 84.0 & 83.7 & NCR/NET \\
+Enhancing tumour & 88.7 & 89.0 & 88.8 & Enhancement-dominant \\
+Enhancement-dominant & 84.0 & 84.0 & 84.0 & Enhancing tumour \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Threshold sensitivity}
+\label{subsec:threshold_sensitivity}
+
+The enhancement-dominant thresholds were fixed before external testing using the pre-specified per-class-count criterion described in Section~\ref{subsec:label_construction}. Table~\ref{tab:threshold_sensitivity} shows that nearby threshold choices change the exact class distribution but do not alter the main ranking of methods or the property-verification-yield conclusion; the fixed operating point is not selected by, but is consistent with, this sweep.
+
+\begin{table}[H]
+\centering
+\caption{Sensitivity of the derived enhancement-dominant label to nearby threshold pairs. Results are reported for the proposed model on BraTS folds. The fixed operating point (row 2) was chosen a priori on the calibration folds using a per-class sample-count criterion, not by this sweep.}
+\label{tab:threshold_sensitivity}
+\scriptsize
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{ccccc}
+\toprule
+$r_{\mathrm{ET}}$ threshold & $\rho_{\mathrm{ET}}$ threshold & \textbf{Enhancement-dominant cases} & \textbf{Macro-F1} & \textbf{Verified (\%)} \\
+\midrule
+0.30 & 1.10 & 22.8\% & $85.3\pm1.1$ & 91.9 \\
+0.35 & 1.25 (fixed operating point) & 20.4\% & $85.9\pm1.0$ & 92.8 \\
+0.40 & 1.40 & 18.7\% & $85.4\pm1.2$ & 92.1 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+\subsection{Verification and workflow checking}
+
+At $\eps=0.031$, the verifier proves $92.8\%$ of tested properties UNSAT under the stated abstraction with mean runtime $9.7$ s and timeout rate $1.4\%$. Larger perturbation budgets widen abstractions, reducing property-verification yield and increasing runtime. TLC verifies all workflow invariants, so SAT and TIMEOUT outcomes cannot be released with a verified-property status in the model; the negative-control mutant (Section~\ref{subsec:tla_workflow}) additionally confirms these invariants would detect an unsafe release path if one were introduced.
+
+With up to eight properties checked per subject at a mean of 9.7 s each, full per-subject property checking adds on the order of one to two minutes of latency beyond the underlying inference time. This is compatible with asynchronous, batch-style reporting workflows (e.g., overnight or worklist-queued property checking) but would require further optimisation, such as property-level parallelisation or tighter bound propagation, before it could support a real-time, point-of-care reading workflow; this trade-off is discussed further in Section~\ref{sec:discussion}.
+
+\begin{table}[H]
+\centering
+\caption{Verification scalability.}
+\label{tab:verification_results}
+\scriptsize
+\begin{tabular}{ccccc}
+\toprule
+$\boldsymbol{\eps}$ & \textbf{Verified (\%)} & \textbf{Time/property (s)} & \textbf{Timeout} & \textbf{False alarm} \\
+\midrule
+0.005 & 99.1 & $2.5\pm0.8$ & 0.0 & 0.5 \\
+0.010 & 98.2 & $3.8\pm1.0$ & 0.1 & 0.8 \\
+0.020 & 95.7 & $6.4\pm1.6$ & 0.6 & 1.9 \\
+0.031 & 92.8 & $9.7\pm2.7$ & 1.4 & 3.2 \\
+0.040 & 87.9 & $16.1\pm5.0$ & 2.8 & 5.4 \\
+0.050 & 79.4 & $31.5\pm10.4$ & 4.1 & 8.0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Solver log at $\eps=0.031$.}
+\label{tab:solver_log}
+\scriptsize
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{lrrrrrrr}
+\toprule
+\textbf{Cohort} & \textbf{Queries} & \textbf{UNSAT} & \textbf{SAT} & \textbf{False alarms} & \textbf{Genuine viol.} & \textbf{Timeout} & \textbf{Mean time} \\
+\midrule
+BraTS folds & 4,800 & 4,454 & 279 & 154 & 125 & 67 & 9.7 \\
+UCSF-PDGM & 1,600 & 1,429 & 139 & 78 & 61 & 32 & 11.4 \\
+UPenn-GBM & 1,600 & 1,402 & 157 & 84 & 73 & 41 & 12.2 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+The SAT totals in Table~\ref{tab:solver_log} are not treated as a single failure mode. On the BraTS folds, 279 SAT queries were subjected to reachability review: 154 were classified as abstraction false alarms and 125 as reachable violations under the implemented review procedure. The same distinction is retained for the two external cohorts. These aggregate results show why SAT cannot be equated directly with a concrete model failure and why UNSAT, SAT, and TIMEOUT must remain separate workflow outcomes. Because the present study reports this analysis at cohort level, the solver log is interpreted as an overall verification diagnostic rather than as a ranking of individual symbolic properties.
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.92\linewidth]{figures/robustness_scalability.png}
+\caption{Property-verification yield, runtime, and timeout behaviour as perturbation budget increases.}
+\label{fig:robustness}
+\end{figure}
+
+\subsection{Ablation and conformal sets}
+\label{subsec:ablation}
+
+The component ablations separate predictive performance, soft-prior satisfaction, and formal property-verification rate. Removing the LTN regulariser or the verification-aware repair stage reduces both macro-F1 and the proportion of checked properties proved over the selected latent abstractions. Random axioms perform worse than the imaging-informed priors, indicating that the benefit does not arise from adding arbitrary logical regularisation. The repair ablation removes the complete repair stage, including its additional fine-tuning, so the observed difference is interpreted at the component level rather than attributed solely to counterexample targeting.
+
+\begin{table}[H]
+\centering
+\caption{Component ablation. ``Rule-sat. rate'' is the empirical satisfaction rate of the seven training-time soft priors $\varphi_1$--$\varphi_7$; ``Verified'' is the SMT property-verification yield at the selected operating point.}
+\label{tab:ablation_components}
+\scriptsize
+\begin{tabular}{lccc}
+\toprule
+\textbf{Variant / model} & \textbf{Macro-F1} & \textbf{Rule-sat. rate} & \textbf{Verified (\%)} \\
+\midrule
+No LTN loss & 81.0 & 70.5 & 80.6 \\
+No verification repair & 83.0 & 88.1 & 85.7 \\
+Random axioms & 80.2 & 74.9 & 77.4 \\
+\textbf{Full proposed} & \textbf{85.9} & \textbf{94.8} & \textbf{92.8} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Conformal prediction is evaluated as a post-hoc uncertainty layer rather than as a mechanism that changes the point classifier. At $\alpha=0.10$, the proposed model reaches 91.8\% empirical coverage with a mean set size of 1.34. For comparison, applying the same conformal procedure to the transformer and evidential baselines produces similar empirical coverage but larger prediction sets, indicating lower set efficiency for these baselines under the reported protocol.
+
+\begin{table}[H]
+\centering
+\caption{Conformal prediction behaviour at nominal 90\% coverage.}
+\label{tab:conformal_comparison}
+\scriptsize
+\begin{tabular}{lcc}
+\toprule
+\textbf{Model} & \textbf{Empirical coverage (\%)} & \textbf{Mean set size} \\
+\midrule
+Transformer + conformal & 90.7 & 1.52 \\
+Evidential + conformal & 90.9 & 1.47 \\
+\textbf{Proposed + conformal} & \textbf{91.8} & \textbf{1.34} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ---------------------------------------------------------------------
+\section{Discussion}
+\label{sec:discussion}
+
+The experiments support the feasibility of combining predictive performance with explicit assurance mechanisms in a multimodal medical-AI pipeline. First, four-sequence fusion outperforms the single-sequence baselines, showing that T1, T1ce, T2, and FLAIR contribute complementary information to the derived lesion-compartment task. Second, the imaging-informed neurosymbolic prior layer structures the learned representation and improves property-verification behaviour, while the post-training SMT layer provides a separate machine-checkable test of selected fusion-head properties. Third, TLA$^{+}$ verification addresses a different safety question from numerical SMT solving: it checks whether verification status can be released incorrectly after SAT, TIMEOUT, missing set information, or incomplete traceability. Finally, conformal prediction represents predictive ambiguity without being presented as a formal proof.
+
+\paragraph{Clinical-AI interpretation.}
+The main value of the framework is not a claim that a brain-tumour prediction has been clinically certified. Rather, it demonstrates a layered assurance design in which each output can carry three distinct pieces of information: a learned prediction, a formal status for explicitly checked properties, and a calibrated prediction set. This emphasis on explicit assumptions, traceability, robustness, and human-facing interpretation is consistent with recent medical-AI literature and trustworthy-deployment guidance \cite{lekadir2025future,cicek2025position,andersen2026mapping}. This separation is important in medical AI because a high softmax probability, a small conformal set, and an UNSAT verification result have different meanings. The proposed workflow keeps those meanings explicit and prevents a failed or timed-out verification query from being presented with a verified-property status. Situating this within current medical-AI regulatory science, this work does not constitute, and is not presented as, evidence toward regulatory clearance of an AI-enabled medical device under the U.S. FDA's lifecycle-oriented guidance for AI-enabled device software functions or compliance with the European Union Artificial Intelligence Act \cite{fda2025aidsf,eu2024aiact}; rather, the layered evidence design (prediction, formal property status, calibrated set) is intended as one building block that a future regulatory submission would need to substantially extend with clinical validation, risk management, and post-market surveillance components.
+
+\paragraph{Automation bias and verification-status labelling.}
+A specific risk that is easy to underestimate is that the word ``certified,'' however carefully scoped in this manuscript, could be misread by a clinical end user as meaning the diagnosis itself has been verified, rather than that a narrow, explicitly stated latent-space property has been proven UNSAT over a sound abstraction. This is a known human-factors risk in AI-assisted diagnosis: confident or authoritative-sounding system language can increase automation bias, i.e., over-reliance on an AI output even when a clinician's own judgement would otherwise lead them to question it. If this framework were deployed, we would recommend that any user-facing interface avoid the bare word ``certified'' and instead display the specific property checked (e.g., ``verified: this prediction is not simultaneously background-dominant and tumour-positive under the tested perturbation range''), together with the conformal set and an explicit statement that certification does not indicate diagnostic correctness. This labelling question is not resolved by the present work and should be treated as a required human-factors design step prior to any clinical piloting, ideally evaluated with clinician users rather than assumed.
+
+\paragraph{External transfer and calibration.}
+External evaluation on UCSF-PDGM and UPenn-GBM shows the expected reduction in classification performance relative to internal BraTS validation, while empirical conformal coverage remains close to the nominal $1-\alpha=90\%$ target. The observed 90.5--91.1\% coverage should not be interpreted as a distribution-free guarantee under cohort shift. Shared resampling, masking, and normalisation reduce some acquisition-related variation, but scanner protocols, population characteristics, contrast administration, and annotation practices remain potential sources of non-exchangeability. The external results therefore provide empirical evidence of transfer behaviour rather than proof of clinical generalisation.
+
+\paragraph{Formal assurance boundary.}
+The strongest formal statement in this work is conditional. SMT verifies the fusion head exactly with respect to the supplied latent bounds, and Theorem~\ref{thm:soundness} transfers that result to represented perturbations only when the encoder abstraction is sound. The resulting property-verification scope is therefore narrower than full end-to-end neural verification. This boundary is deliberate: encoding all four 3D encoders directly would be substantially more expensive, whereas latent abstraction makes the verification problem tractable. SAT results are also treated conservatively because an abstract counterexample may be unreachable in the concrete encoder; the reported false-alarm analysis makes this limitation visible.
+
+\paragraph{Relationship between labels and priors.}
+The enhancement-dominant category is a reproducible experimental imaging label, not a diagnostic, prognostic, or treatment-response category. Two prior templates, $\varphi_3$ and $\varphi_6$, are conceptually related to the same enhancement-dominance signal used during label construction. Their UNSAT verification results therefore measure consistency with a concept partially reflected in the target definition rather than providing an independent clinical validation. As stated in Section~\ref{subsec:label_construction}, none of the priors or thresholds were reviewed by a practising radiologist prior to use; the manuscript reports the label-related priors separately from label-independent priors and structural properties so that property-verification yield is not overstated, but clinical review of all eight templates remains outstanding work rather than a completed step.
+
+\paragraph{Limitations and clinical translation.}
+The perturbation model is $\ell_\infty$ and does not represent every clinically plausible source of variation, including non-rigid motion, contrast-dose differences, or major protocol shifts. The current architecture also requires all four sequences to be present and successfully preprocessed; it has no defined fallback behaviour for a missing or severely degraded sequence, which is a common occurrence in real acquisition (e.g., a patient unable to receive contrast, or a truncated protocol). This is a first-order deployment barrier rather than a minor extension, and addressing it would require either a sequence-dropout-aware training regime, an explicit ``insufficient input, no property status issued'' fallback status in the TLA$^{+}$ workflow, or both; neither is implemented in the current study. The public cohorts are retrospectively assembled and harmonisation is imperfect. The derived five-class task has not been validated as a clinical taxonomy, its priors and thresholds have not undergone clinical expert review (Section~\ref{subsec:label_construction}), and the current study does not include prospective deployment, reader studies, clinical endpoints, or decision-impact analysis. Before any clinical use, the prior templates would require neuroradiologist review, the formal properties would need to be connected to predefined clinical hazards, the verification-status labelling scheme would need human-factors evaluation, missing-sequence behaviour would need to be defined and verified, and the complete software and data pipeline would require prospective multi-institutional validation.
+
+\paragraph{What is not claimed.}
+The framework is not a replacement for radiologist assessment, tumour grading, molecular classification, treatment-response assessment, or clinical decision making. It does not prove the complete voxel-level network and does not establish regulatory or clinical safety. The contribution is a technical demonstration that multimodal medical-AI outputs can be accompanied by scoped formal evidence, safe verification-status-release logic, and calibrated uncertainty under explicitly stated assumptions.
+
+% ---------------------------------------------------------------------
+\section{Conclusion}
+\label{sec:conclusion}
+
+This paper presented a trustworthy neurosymbolic framework for multi-parametric brain MRI that combines multimodal learning with scoped formal property verification and calibrated uncertainty. Sequence-specific encoders capture complementary mpMRI evidence, imaging-informed symbolic priors regularise learning, sound latent abstractions support SMT checking of selected fusion-head properties, and TLA$^{+}$ verifies that unsafe solver outcomes cannot be released with a verified-property status. Split conformal prediction provides a separate set-valued description of predictive uncertainty. Evaluation on BraTS 2021 with external transfer to UCSF-PDGM and UPenn-GBM shows that the framework can retain competitive predictive performance while reporting property-verification yield, solver behaviour, uncertainty, and failure modes explicitly. The resulting contribution is not a claim of clinical certification, but a concrete architecture for making the assurance boundary of medical-AI predictions more visible and machine-checkable. Future work should extend verification toward richer perturbation models, missing-sequence conditions, tighter end-to-end abstractions, clinician-reviewed imaging-informed priors, human-factors-evaluated verification-status labelling, and prospectively defined clinical safety properties.
+
+\section*{Ethics statement}
+This study used only publicly available, de-identified imaging datasets (BraTS 2021, UCSF-PDGM, and UPenn-GBM), released under their respective data use agreements. Ethical approval and informed consent for the original data collection were obtained by the institutions that assembled each dataset, as documented in their original publications \cite{brats2021,ucsf2022,upenn2022}. No new human subjects data were collected for this study, no additional identifiable information was accessed, and no additional institutional ethical approval was required for this secondary, retrospective analysis of fully de-identified public data.
+
+\section*{CRediT authorship contribution statement}
+Shubha Chakraborty: Conceptualization, Methodology, Software, Formal analysis, Writing -- original draft. Rahul Karmakar: Methodology, Validation, Supervision, Writing -- review and editing.
+
+\section*{Declaration of competing interest}
+The authors declare that they have no known competing financial interests or personal relationships that could have influenced the work reported in this paper.
+
+\section*{Funding}
+This research did not receive any specific grant from funding agencies in the public, commercial, or not-for-profit sectors.
+
+\section*{Data availability}
+The study uses public datasets only: BraTS 2021, UCSF-PDGM, and UPenn-GBM. Raw medical images are not redistributed. The anonymised reproducibility package submitted with this manuscript contains the exact fold files, label-construction code, preprocessing configuration, training scripts, solver logs, TLA$^{+}$ files (including the negative-control mutant), TLC logs, aggregate tables, the label-related-versus-independent prior split, and figure-generation scripts used to produce the reported results. The reviewed version will be archived with a permanent DOI after acceptance. Reporting checklists, if requested or supplied at submission, are separate journal-reporting documents and are not part of the computational reproducibility package described here.
+
+\section*{Declaration of generative AI and AI-assisted technologies in the writing process}
+During the preparation of this work, the authors used AI-assisted language tools to improve readability, organisation, and formatting. After using these tools, the authors reviewed and edited the content as needed and take full responsibility for the content of the publication.
+
+\appendix
+\section{Implementation Details}
+\label{app:implementation}
+All models are trained using the fixed subject-level split protocol described in Section~\ref{sec:experiments}. The SMT verifier is applied after training with the model fixed in inference mode. UNSAT results are recorded as verified-property outcomes, SAT results are passed to counterexample review, and TIMEOUT results receive no verified-property status. The TLA$^{+}$ workflow model is checked independently from the neural model using finite domains for workflow phases, solver results, the artifact variable \texttt{certificate}, prediction-set status, and release status. A mutated variant of the same workflow model, with the artifact's \textsc{AssignCertified} guard deliberately weakened, is checked as a negative control to confirm that the invariants are falsifiable (Section~\ref{subsec:tla_workflow}).
+
+\begin{thebibliography}{99}
+
+\bibitem{zhou2019review}
+T. Zhou, S. Ruan, and S. Canu,
+``A review: Deep learning for medical image segmentation using multi-modality fusion,''
+\emph{Array}, vol. 3--4, Article 100004, 2019.
+
+\bibitem{baltrusaitis2019multimodal}
+T. Baltrusaitis, C. Ahuja, and L.-P. Morency,
+``Multimodal machine learning: A survey and taxonomy,''
+\emph{IEEE Transactions on Pattern Analysis and Machine Intelligence}, vol. 41, no. 2, pp. 423--443, 2019.
+
+\bibitem{li2022multimodal}
+Y. Li, F. Fan, Y. Zhang, and J. Wang,
+``Multimodal medical image fusion: A survey,''
+\emph{Information Fusion}, vol. 79, pp. 123--142, 2022.
+
+\bibitem{ramachandram2017deep}
+D. Ramachandram and G. W. Taylor,
+``Deep multimodal learning: A survey on recent advances and trends,''
+\emph{IEEE Signal Processing Magazine}, vol. 34, no. 6, pp. 96--108, 2017.
+
+\bibitem{chen2021transunet}
+J. Chen et al.,
+``TransUNet: Transformers make strong encoders for medical image segmentation,''
+\emph{arXiv preprint arXiv:2102.04306}, 2021.
+
+\bibitem{hatamizadeh2022unetr}
+A. Hatamizadeh et al.,
+``UNETR: Transformers for 3D medical image segmentation,''
+\emph{Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision}, pp. 574--584, 2022.
+
+\bibitem{hayat2022medfuse}
+N. Hayat, K. J. Geras, and F. E. Shamout,
+``MedFuse: Multi-modal fusion with clinical time-series data and chest X-ray images,''
+\emph{Proceedings of the 7th Machine Learning for Healthcare Conference},
+PMLR, vol. 182, pp. 479--503, 2022.
+
+\bibitem{sensoy2018evidential}
+M. Sensoy, L. Kaplan, and M. Kandemir,
+``Evidential deep learning to quantify classification uncertainty,''
+\emph{Advances in Neural Information Processing Systems}, vol. 31, 2018.
+
+\bibitem{vovk2005algorithmic}
+V. Vovk, A. Gammerman, and G. Shafer,
+\emph{Algorithmic Learning in a Random World}.
+Springer, 2005.
+
+\bibitem{angelopoulos2021gentle}
+A. N. Angelopoulos and S. Bates,
+``A gentle introduction to conformal prediction and distribution-free uncertainty quantification,''
+\emph{arXiv preprint arXiv:2107.07511}, 2021.
+
+\bibitem{romano2020classification}
+Y. Romano, M. Sesia, and E. Candes,
+``Classification with valid and adaptive coverage,''
+\emph{Advances in Neural Information Processing Systems}, vol. 33, pp. 3581--3591, 2020.
+
+\bibitem{katz2017reluplex}
+G. Katz et al.,
+``Reluplex: An efficient SMT solver for verifying deep neural networks,''
+\emph{International Conference on Computer Aided Verification}, pp. 97--117, 2017.
+
+\bibitem{katz2019marabou}
+G. Katz et al.,
+``The Marabou framework for verification and analysis of deep neural networks,''
+\emph{International Conference on Computer Aided Verification}, pp. 443--452, 2019.
+
+\bibitem{singh2019abstract}
+G. Singh, T. Gehr, M. Puschel, and M. Vechev,
+``An abstract domain for certifying neural networks,''
+\emph{Proceedings of the ACM on Programming Languages}, vol. 3, POPL, pp. 1--30, 2019.
+
+\bibitem{zhang2018efficient}
+H. Zhang, T. W. Weng, P. Y. Chen, C. J. Hsieh, and L. Daniel,
+``Efficient neural network robustness certification with general activation functions,''
+\emph{Advances in Neural Information Processing Systems}, vol. 31, 2018.
+
+\bibitem{donadello2017ltn}
+I. Donadello, L. Serafini, and A. d'Avila Garcez,
+``Logic Tensor Networks for semantic image interpretation,''
+\emph{Proceedings of the Twenty-Sixth International Joint Conference on Artificial Intelligence}, pp. 1596--1602, 2017.
+
+\bibitem{badreddine2022logic}
+S. Badreddine, A. d'Avila Garcez, L. Serafini, and M. Spranger,
+``Logic Tensor Networks,''
+\emph{Artificial Intelligence}, vol. 303, Article 103649, 2022.
+
+\bibitem{manhaeve2018deepproblog}
+R. Manhaeve, S. Dumancic, A. Kimmig, T. Demeester, and L. De Raedt,
+``DeepProbLog: Neural probabilistic logic programming,''
+\emph{Advances in Neural Information Processing Systems}, vol. 31, 2018.
+
+\bibitem{brats2021}
+U. Baid et al.,
+``The RSNA-ASNR-MICCAI BraTS 2021 Benchmark on Brain Tumor Segmentation and Radiogenomic Classification,''
+\emph{arXiv preprint arXiv:2107.02314}, 2021.
+
+\bibitem{ucsf2022}
+E. Calabrese et al.,
+``The University of California San Francisco Preoperative Diffuse Glioma MRI Dataset,''
+\emph{Radiology: Artificial Intelligence}, vol. 4, no. 6, Article e220058, 2022.
+
+\bibitem{upenn2022}
+S. Bakas et al.,
+``The University of Pennsylvania glioblastoma (UPenn-GBM) cohort: Advanced MRI, clinical, genomics, and radiomics,''
+\emph{Scientific Data}, vol. 9, Article 453, 2022.
+
+\bibitem{collins2024tripod}
+G. S. Collins et al.,
+``TRIPOD+AI statement: updated guidance for reporting clinical prediction models that use regression or machine learning methods,''
+\emph{BMJ}, vol. 385, e078378, 2024.
+\url{https://doi.org/10.1136/bmj-2023-078378}
+
+\bibitem{tejani2024claim}
+A. S. Tejani et al.,
+``Checklist for Artificial Intelligence in Medical Imaging (CLAIM): 2024 Update,''
+\emph{Radiology: Artificial Intelligence}, vol. 6, no. 4, Article e240300, 2024.
+\url{https://doi.org/10.1148/ryai.240300}
+
+\bibitem{lekadir2025future}
+K. Lekadir et al.,
+``FUTURE-AI: international consensus guideline for trustworthy and deployable artificial intelligence in healthcare,''
+\emph{BMJ}, vol. 388, e081554, 2025.
+\url{https://doi.org/10.1136/bmj-2024-081554}
+
+\bibitem{cicek2025position}
+V. Cicek and U. Bagci,
+``Position of artificial intelligence in healthcare and future perspective,''
+\emph{Artificial Intelligence in Medicine}, vol. 167, Article 103193, 2025.
+\url{https://doi.org/10.1016/j.artmed.2025.103193}
+
+\bibitem{andersen2026mapping}
+A. Andersen, R. Huang, and E. J. Liu,
+``The application of artificial intelligence in healthcare practice: A mapping review of systematic reviews,''
+\emph{Artificial Intelligence in Medicine}, vol. 181, Article 103495, 2026.
+\url{https://doi.org/10.1016/j.artmed.2026.103495}
+
+\bibitem{gehr2018ai2}
+T. Gehr et al.,
+``AI2: Safety and robustness certification of neural networks with abstract interpretation,''
+\emph{IEEE Symposium on Security and Privacy}, pp. 3--18, 2018.
+
+\bibitem{garcez2020neural}
+A. d'Avila Garcez and L. C. Lamb,
+``Neurosymbolic AI: The 3rd wave,''
+\emph{arXiv preprint arXiv:2012.05876}, 2020.
+
+\bibitem{besold2017neural}
+T. R. Besold et al.,
+``Neural-symbolic learning and reasoning: A survey and interpretation,''
+\emph{arXiv preprint arXiv:1711.03902}, 2017.
+
+\bibitem{yang2020neurasp}
+Z. Yang, A. Ishay, and J. Lee,
+``NeurASP: Embracing neural networks into answer set programming,''
+\emph{Proceedings of the Twenty-Ninth International Joint Conference on Artificial Intelligence}, pp. 1755--1762, 2020.
+
+\bibitem{louis2021who}
+D. N. Louis et al.,
+``The 2021 WHO Classification of Tumors of the Central Nervous System: A summary,''
+\emph{Neuro-Oncology}, vol. 23, no. 8, pp. 1231--1251, 2021.
+
+\bibitem{wen2010rano}
+P. Y. Wen et al.,
+``Updated response assessment criteria for high-grade gliomas: Response Assessment in Neuro-Oncology Working Group,''
+\emph{Journal of Clinical Oncology}, vol. 28, no. 11, pp. 1963--1972, 2010.
+
+\bibitem{lamport2002specifying}
+L. Lamport,
+\emph{Specifying Systems: The TLA$^{+}$ Language and Tools for Hardware and Software Engineers},
+Addison-Wesley, 2002.
+
+\bibitem{visser2019interrater}
+M. Visser, D. M. J. M\"uller, R. J. M. van Duijn, et al.,
+``Inter-rater agreement in glioma segmentations on longitudinal MRI,''
+\emph{NeuroImage: Clinical}, vol. 22, Article 101727, 2019.
+\url{https://doi.org/10.1016/j.nicl.2019.101727}
+
+\bibitem{fda2025aidsf}
+U.S. Food and Drug Administration,
+``Artificial Intelligence-Enabled Device Software Functions: Lifecycle Management and Marketing Submission Recommendations,''
+Draft Guidance for Industry and Food and Drug Administration Staff, Jan. 2025.
+\url{https://www.fda.gov/regulatory-information/search-fda-guidance-documents/artificial-intelligence-enabled-device-software-functions-lifecycle-management-and-marketing}
+
+\bibitem{eu2024aiact}
+European Parliament and Council of the European Union,
+``Regulation (EU) 2024/1689 laying down harmonised rules on artificial intelligence (Artificial Intelligence Act),''
+\emph{Official Journal of the European Union}, 2024.
+\url{https://eur-lex.europa.eu/eli/reg/2024/1689/oj}
+
+\end{thebibliography}
+
+\end{document}

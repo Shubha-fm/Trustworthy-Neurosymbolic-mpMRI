@@ -1,0 +1,4 @@
+Cohort,Queries,UNSAT,SAT,False_alarms,Genuine_violations,Timeout,Mean_time_s
+BraTS folds,4800,4454,279,154,125,67,9.7
+UCSF-PDGM,1600,1429,139,78,61,32,11.4
+UPenn-GBM,1600,1402,157,84,73,41,12.2
