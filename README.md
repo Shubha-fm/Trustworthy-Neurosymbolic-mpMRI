@@ -108,8 +108,5 @@ pytest -q
 
 Example commands are documented in `docs/REPRODUCTION.md`.
 
-## Reproducibility boundary
-
-This ZIP contains a faithful implementation scaffold of the method described in the manuscript plus the manuscript-reported aggregate results. It does **not** contain the original MRI data, trained weights, private experiment logs, or any unprovided subject-level predictions. Those artifacts must be generated from legitimately obtained datasets.
 
 
