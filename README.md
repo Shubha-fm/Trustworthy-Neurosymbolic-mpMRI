@@ -112,12 +112,4 @@ Example commands are documented in `docs/REPRODUCTION.md`.
 
 This ZIP contains a faithful implementation scaffold of the method described in the manuscript plus the manuscript-reported aggregate results. It does **not** contain the original MRI data, trained weights, private experiment logs, or any unprovided subject-level predictions. Those artifacts must be generated from legitimately obtained datasets.
 
-## Citation
 
-If this repository is archived for the paper, replace the placeholder citation below with the final article/DOI.
-
-```text
-Chakraborty S, Karmakar R. Trustworthy Neurosymbolic Fusion for
-Multi-Parametric Brain MRI with Formal Verification and Calibrated Uncertainty.
-Artificial Intelligence in Medicine. (submitted)
-```
